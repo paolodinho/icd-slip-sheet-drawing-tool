@@ -196,6 +196,9 @@
 <script>
 function $(id){return document.getElementById(id)}
 function num(id){return parseFloat($(id).value)||0}
+// Font vẽ trên canvas: chỉ dùng font hệ thống phổ biến (không webfont) để in/xuất PDF
+// luôn giữ đúng bố cục trên mọi máy, không lệch dòng do thiếu font.
+const FONT='Arial, "Helvetica Neue", Helvetica, sans-serif';
 const LOGO=new Image(); let LOGO_OK=false;
 LOGO.onload=()=>{LOGO_OK=true; render();};
 LOGO.src='assets/logo_icd.png';
@@ -385,7 +388,7 @@ function dimH(ctx,P,x1,x2,y,dimY,label,vertText){
   const dir = db.X>da.X?0:Math.PI;
   arrowHead(ctx,da.X,da.Y,Math.PI+dir,7); arrowHead(ctx,db.X,db.Y,dir,7);
   const mx=(da.X+db.X)/2,my=(da.Y+db.Y)/2;
-  ctx.font='bold 13px Arial';
+  ctx.font='bold 13px '+FONT;
   if(vertText){
     // dải quá hẹp theo chiều ngang (tai trái/phải) -> xoay chữ dọc, đẩy hẳn ra khỏi
     // đường kích thước (dọc theo dải cao) thay vì đè lên đường/nhãn khác
@@ -410,7 +413,7 @@ function dimV(ctx,P,y1,y2,x,dimX,label,horizText){
   const dir = db.Y>da.Y? Math.PI/2 : -Math.PI/2;
   arrowHead(ctx,da.X,da.Y,-dir,7); arrowHead(ctx,db.X,db.Y,dir,7);
   const mx=(da.X+db.X)/2,my=(da.Y+db.Y)/2;
-  ctx.font='bold 13px Arial';
+  ctx.font='bold 13px '+FONT;
   if(horizText){
     // dải quá hẹp theo chiều dọc (tai trên/dưới) -> giữ chữ nằm ngang, đẩy sang bên
     // cạnh đường kích thước thay vì đè lên (chữ nằm ngang cần ít chiều cao hơn nhiều)
@@ -426,6 +429,48 @@ function dimV(ctx,P,y1,y2,x,dimX,label,horizText){
   }
 }
 
+/* ===== Hàng thông số dưới tiêu đề (title block): các mục cách nhau bằng gạch dọc
+   mảnh, canh giữa cả hàng - thay cho kiểu nối chuỗi "A | B | C" dày đặc trước đây. ===== */
+function drawInfoRow(ctx,cx,y,segments){
+  const gap=16;
+  ctx.textBaseline='middle';
+  const parts=segments.map(seg=>{
+    if(seg.type==='swatch'){
+      ctx.font='600 12px '+FONT;
+      const boxW=13, boxGap=6;
+      return {seg, width:boxW+boxGap+ctx.measureText(seg.label).width, boxW, boxGap};
+    }
+    ctx.font='600 12px '+FONT; const labelW=ctx.measureText(seg.label+': ').width;
+    ctx.font='700 12px '+FONT; const valueW=ctx.measureText(seg.value).width;
+    return {seg, width:labelW+valueW, labelW};
+  });
+  const dividerSpan=gap*2+1;
+  const totalW=parts.reduce((s,p)=>s+p.width,0)+dividerSpan*(parts.length-1);
+  let x=cx-totalW/2;
+  parts.forEach((p,i)=>{
+    const seg=p.seg;
+    if(seg.type==='swatch'){
+      ctx.fillStyle=seg.color; ctx.fillRect(x,y-6.5,p.boxW,13);
+      ctx.lineWidth=1; ctx.strokeStyle='#27343A'; ctx.strokeRect(x,y-6.5,p.boxW,13);
+      ctx.textAlign='left'; ctx.fillStyle='#27343A'; ctx.font='600 12px '+FONT;
+      ctx.fillText(seg.label, x+p.boxW+p.boxGap, y);
+    }else{
+      ctx.textAlign='left';
+      ctx.font='600 12px '+FONT; ctx.fillStyle='#6B7680';
+      ctx.fillText(seg.label+': ', x, y);
+      ctx.font='700 12px '+FONT; ctx.fillStyle='#27343A';
+      ctx.fillText(seg.value, x+p.labelW, y);
+    }
+    x+=p.width;
+    if(i<parts.length-1){
+      x+=gap;
+      ctx.strokeStyle='#D8DCE0'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(x,y-8); ctx.lineTo(x,y+8); ctx.stroke();
+      x+=1+gap;
+    }
+  });
+}
+
 function render(){
   const cv=$('sheet'), ctx=cv.getContext('2d');
   const FOOTER_H=64;
@@ -437,7 +482,7 @@ function render(){
 
   // vùng vẽ + margin cho dimension lines xung quanh
   const marginOut=150; // đường cote tổng thể ngoài cùng
-  const marginTitle=60;
+  const marginTitle=96;
   const areaX=marginOut, areaY=marginTitle+marginOut, areaW=cv.width-marginOut*2, areaH=cv.height-FOOTER_H-marginTitle-marginOut*2-80;
   const spanX=g.x1-g.x0, spanY=g.y1-g.y0;
   const s=Math.min(areaW/spanX, areaH/spanY);
@@ -478,27 +523,24 @@ function render(){
   if(g.lips.left) dimH(ctx,P, g.x0, 0, midY, midY, 'Tai trái: '+Math.round(lipD)+'mm', true);
   if(g.lips.right) dimH(ctx,P, g.L, g.x1, midY, midY, 'Tai phải: '+Math.round(lipD)+'mm', true);
 
-  // ==== tiêu đề + nhãn số tai ====
-  ctx.font='bold 22px Arial'; ctx.textAlign='center'; ctx.fillStyle='#27343A';
-  ctx.fillText($('title').value||'', cv.width/2, 34);
-  ctx.font='600 13px Arial'; ctx.fillStyle='#6B7680';
-  const thMM=curThicknessMM();
-  const thTxt = thMM!=null ? ('Dày '+thMM+'mm | ') : '';
-  ctx.fillText(matLabel+' | '+thTxt+'Tải trọng: '+$('loadNote').value+'kg | Tái sử dụng: '+$('reuseNote').value, cv.width/2, 54);
+  // ==== tiêu đề + dòng thông số (title block gọn, 1 hàng chip có gạch phân cách) ====
+  ctx.textBaseline='alphabetic';
+  ctx.font='bold 23px '+FONT; ctx.textAlign='center'; ctx.fillStyle='#27343A';
+  ctx.fillText($('title').value||'', cv.width/2, 30);
 
-  // ==== chú thích màu thực tế (bản vẽ giữ đen trắng theo chuẩn kỹ thuật, màu thật ghi chú riêng bằng ô mẫu) ====
-  ctx.font='600 12px Arial';
-  const swLabel='Màu thực tế sản phẩm: '+m.label;
-  const swTextW=ctx.measureText(swLabel).width;
-  const swBoxW=16, swGap=8, swTotalW=swBoxW+swGap+swTextW;
-  const swX=cv.width/2-swTotalW/2, swY=68;
-  ctx.fillStyle=m.color; ctx.fillRect(swX,swY,swBoxW,swBoxW);
-  ctx.lineWidth=1; ctx.strokeStyle='#27343A'; ctx.strokeRect(swX,swY,swBoxW,swBoxW);
-  ctx.textAlign='left'; ctx.textBaseline='middle'; ctx.fillStyle='#27343A';
-  ctx.fillText(swLabel, swX+swBoxW+swGap, swY+swBoxW/2);
+  ctx.strokeStyle='#D8DCE0'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(cv.width/2-220,46); ctx.lineTo(cv.width/2+220,46); ctx.stroke();
+
+  const thMM=curThicknessMM();
+  drawInfoRow(ctx, cv.width/2, 68, [
+    {type:'swatch', color:m.color, label:matLabel},
+    {type:'text', label:'Độ dày', value:(thMM!=null?thMM+'mm':'-')},
+    {type:'text', label:'Tải trọng', value:$('loadNote').value+'kg'},
+    {type:'text', label:'Tái sử dụng', value:$('reuseNote').value}
+  ]);
 
   const n=countLips();
-  ctx.font='bold 26px Arial'; ctx.textAlign='right'; ctx.fillStyle='#27343A';
+  ctx.font='bold 26px '+FONT; ctx.textAlign='right'; ctx.fillStyle='#27343A';
   const brP=P(g.x1,g.y1);
   ctx.fillText(n+' Lip'+(n===1?'':'s'), brP.X, brP.Y+40);
 
@@ -509,13 +551,13 @@ function render(){
     const logoW=logoH*(LOGO.naturalWidth/LOGO.naturalHeight||3);
     ctx.fillStyle='#fff'; ctx.fillRect(18, logoY, logoW+12, logoH);
     ctx.drawImage(LOGO, 24, logoY+3, logoW, logoH-6);
-    ctx.textAlign='left'; ctx.fillStyle='#fff'; ctx.font='600 14px Arial'; ctx.textBaseline='middle';
+    ctx.textAlign='left'; ctx.fillStyle='#fff'; ctx.font='600 14px '+FONT; ctx.textBaseline='middle';
     ctx.fillText('Công ty TNHH Sản xuất Công nghiệp ICD Việt Nam', 18+logoW+30, cv.height-FOOTER_H/2);
   } else {
-    ctx.textAlign='left'; ctx.fillStyle='#fff'; ctx.font='600 14px Arial'; ctx.textBaseline='middle';
+    ctx.textAlign='left'; ctx.fillStyle='#fff'; ctx.font='600 14px '+FONT; ctx.textBaseline='middle';
     ctx.fillText('ICD | Công ty TNHH Sản xuất Công nghiệp ICD Việt Nam', 20, cv.height-FOOTER_H/2);
   }
-  ctx.textAlign='right'; ctx.fillStyle='#FB7703'; ctx.font='700 13px Arial';
+  ctx.textAlign='right'; ctx.fillStyle='#FB7703'; ctx.font='700 13px '+FONT;
   ctx.fillText('Hotline: 0983 797 186   •   sales@icdvietnam.com.vn   •   icdvietnam.com.vn', cv.width-20, cv.height-FOOTER_H/2);
 
   refreshTitleAuto();
