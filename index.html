@@ -341,11 +341,18 @@ function cornerPts(px,py,sx,sy,c,style,firstAxis){
     return pts;
   }
   if(style==='lock'){
-    const t1=[px+sx*c*0.35, py+sy*c*0.35];
-    const t2=[px+sx*c*0.35, py+sy*c*0.7];
-    const t3=[px+sx*c*0.7, py+sy*c*0.7];
-    const t4=[px+sx*c*0.7, py+sy*c*0.35];
-    return firstAxis==='v' ? [V,t1,t2,t3,t4,H] : [H,t4,t3,t2,t1,V];
+    // viền thẳng theo mép tai (không vát chéo) tới sát góc, có 1 bậc nhỏ + móc bo tròn khóa 2 tai vào nhau
+    const n=c*0.32, r=c*0.2;
+    const S1=[px, py+sy*(c-n)];
+    const S2=[px+sx*n, py+sy*(c-n)];
+    const hookCenter=[px+sx*n, py+sy*(c-n-r)];
+    const arcPts=[];
+    const a0=Math.atan2(S2[1]-hookCenter[1], S2[0]-hookCenter[0]);
+    const a1=a0+Math.PI;
+    for(let i=0;i<=8;i++){const a=a0+(a1-a0)*i/8; arcPts.push([hookCenter[0]+r*Math.cos(a), hookCenter[1]+r*Math.sin(a)]);}
+    const seqV=[V,S1,S2,...arcPts,H];
+    const seqH=[H,...([...arcPts].reverse()),S2,S1,V];
+    return firstAxis==='v'? seqV : seqH;
   }
   return [[px,py]];
 }
