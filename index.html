@@ -375,7 +375,7 @@ function arrowHead(ctx,x,y,ang,size){
   ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(-size,size*0.42);ctx.lineTo(-size,-size*0.42);ctx.closePath();
   ctx.fillStyle='#27343A';ctx.fill();ctx.restore();
 }
-function dimH(ctx,P,x1,x2,y,dimY,label){
+function dimH(ctx,P,x1,x2,y,dimY,label,vertText){
   const a=P(x1,y),b=P(x2,y),da=P(x1,dimY),db=P(x2,dimY);
   ctx.strokeStyle='#8A939A';ctx.lineWidth=0.8;ctx.setLineDash([3,3]);
   ctx.beginPath();ctx.moveTo(a.X,a.Y);ctx.lineTo(da.X,da.Y);ctx.moveTo(b.X,b.Y);ctx.lineTo(db.X,db.Y);ctx.stroke();
@@ -385,11 +385,22 @@ function dimH(ctx,P,x1,x2,y,dimY,label){
   const dir = db.X>da.X?0:Math.PI;
   arrowHead(ctx,da.X,da.Y,Math.PI+dir,7); arrowHead(ctx,db.X,db.Y,dir,7);
   const mx=(da.X+db.X)/2,my=(da.Y+db.Y)/2;
-  ctx.font='bold 13px Arial';ctx.textAlign='center';ctx.textBaseline='middle';
-  ctx.lineWidth=3.5;ctx.strokeStyle='#fff';ctx.strokeText(label,mx,my-10);
-  ctx.fillStyle='#27343A';ctx.fillText(label,mx,my-10);
+  ctx.font='bold 13px Arial';
+  if(vertText){
+    // dải quá hẹp theo chiều ngang (tai trái/phải) -> xoay chữ dọc, đẩy hẳn ra khỏi
+    // đường kích thước (dọc theo dải cao) thay vì đè lên đường/nhãn khác
+    ctx.save();ctx.translate(mx,my);ctx.rotate(-Math.PI/2);
+    ctx.textAlign='left';ctx.textBaseline='middle';
+    ctx.lineWidth=3.5;ctx.strokeStyle='#fff';ctx.strokeText(label,10,0);
+    ctx.fillStyle='#27343A';ctx.fillText(label,10,0);
+    ctx.restore();
+  }else{
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.lineWidth=3.5;ctx.strokeStyle='#fff';ctx.strokeText(label,mx,my-10);
+    ctx.fillStyle='#27343A';ctx.fillText(label,mx,my-10);
+  }
 }
-function dimV(ctx,P,y1,y2,x,dimX,label){
+function dimV(ctx,P,y1,y2,x,dimX,label,horizText){
   const a=P(x,y1),b=P(x,y2),da=P(dimX,y1),db=P(dimX,y2);
   ctx.strokeStyle='#8A939A';ctx.lineWidth=0.8;ctx.setLineDash([3,3]);
   ctx.beginPath();ctx.moveTo(a.X,a.Y);ctx.lineTo(da.X,da.Y);ctx.moveTo(b.X,b.Y);ctx.lineTo(db.X,db.Y);ctx.stroke();
@@ -399,11 +410,20 @@ function dimV(ctx,P,y1,y2,x,dimX,label){
   const dir = db.Y>da.Y? Math.PI/2 : -Math.PI/2;
   arrowHead(ctx,da.X,da.Y,-dir,7); arrowHead(ctx,db.X,db.Y,dir,7);
   const mx=(da.X+db.X)/2,my=(da.Y+db.Y)/2;
-  ctx.save();ctx.translate(mx,my);ctx.rotate(-Math.PI/2);
-  ctx.font='bold 13px Arial';ctx.textAlign='center';ctx.textBaseline='middle';
-  ctx.lineWidth=3.5;ctx.strokeStyle='#fff';ctx.strokeText(label,0,-10);
-  ctx.fillStyle='#27343A';ctx.fillText(label,0,-10);
-  ctx.restore();
+  ctx.font='bold 13px Arial';
+  if(horizText){
+    // dải quá hẹp theo chiều dọc (tai trên/dưới) -> giữ chữ nằm ngang, đẩy sang bên
+    // cạnh đường kích thước thay vì đè lên (chữ nằm ngang cần ít chiều cao hơn nhiều)
+    ctx.textAlign='left';ctx.textBaseline='middle';
+    ctx.lineWidth=3.5;ctx.strokeStyle='#fff';ctx.strokeText(label,mx+12,my);
+    ctx.fillStyle='#27343A';ctx.fillText(label,mx+12,my);
+  }else{
+    ctx.save();ctx.translate(mx,my);ctx.rotate(-Math.PI/2);
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.lineWidth=3.5;ctx.strokeStyle='#fff';ctx.strokeText(label,0,-10);
+    ctx.fillStyle='#27343A';ctx.fillText(label,0,-10);
+    ctx.restore();
+  }
 }
 
 function render(){
@@ -450,13 +470,13 @@ function render(){
   dimV(ctx,P, g.y0, g.y1, g.x0, g.x0-60, 'Tổng rộng: '+Math.round(g.y1-g.y0)+'mm');
   // dimension lòng trong (working area) - đặt dưới và phải
   dimH(ctx,P, 0, g.L, g.y1, g.y1+50, 'Lòng trong dài: '+Math.round(g.L)+'mm');
-  dimV(ctx,P, 0, g.W, g.L, g.L+50, 'Lòng trong rộng: '+Math.round(g.W)+'mm');
+  dimV(ctx,P, 0, g.W, g.L, g.x1+50, 'Lòng trong rộng: '+Math.round(g.W)+'mm');
   // dimension từng tai đang bật — đặt NGAY TRONG dải tai tương ứng (không lệch sang cạnh khác)
   const lipD=num('lipDepth'), midX=g.L/2, midY=g.W/2;
-  if(g.lips.top) dimV(ctx,P, g.y0, 0, midX, midX, 'Tai trên: '+Math.round(lipD)+'mm');
-  if(g.lips.bottom) dimV(ctx,P, g.W, g.y1, midX, midX, 'Tai dưới: '+Math.round(lipD)+'mm');
-  if(g.lips.left) dimH(ctx,P, g.x0, 0, midY, midY, 'Tai trái: '+Math.round(lipD)+'mm');
-  if(g.lips.right) dimH(ctx,P, g.L, g.x1, midY, midY, 'Tai phải: '+Math.round(lipD)+'mm');
+  if(g.lips.top) dimV(ctx,P, g.y0, 0, midX, midX, 'Tai trên: '+Math.round(lipD)+'mm', true);
+  if(g.lips.bottom) dimV(ctx,P, g.W, g.y1, midX, midX, 'Tai dưới: '+Math.round(lipD)+'mm', true);
+  if(g.lips.left) dimH(ctx,P, g.x0, 0, midY, midY, 'Tai trái: '+Math.round(lipD)+'mm', true);
+  if(g.lips.right) dimH(ctx,P, g.L, g.x1, midY, midY, 'Tai phải: '+Math.round(lipD)+'mm', true);
 
   // ==== tiêu đề + nhãn số tai ====
   ctx.font='bold 22px Arial'; ctx.textAlign='center'; ctx.fillStyle='#27343A';
