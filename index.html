@@ -137,15 +137,15 @@
     <div class="sec"><b>4</b> Kiểu góc (khi 2 tai liền kề gặp nhau)</div>
     <div class="grp">
       <label>Kiểu cắt góc</label>
-      <select id="cornerStyle" onchange="render()">
+      <select id="cornerStyle" onchange="onCornerStyleChange()">
         <option value="square">Không cắt (vuông)</option>
         <option value="cut" selected>Cắt chéo (Corner Cut)</option>
         <option value="squarecut">Cắt vuông bậc (Square Cut)</option>
         <option value="round">Bo tròn (Round Cut)</option>
         <option value="lock">Khóa góc (Corner Lock)</option>
       </select>
-      <label>Kích thước cắt góc (mm) <span style="color:#aaa;font-size:10px">thường 60-100mm</span></label>
-      <input id="cornerSize" type="number" value="70" oninput="render()">
+      <label>Kích thước cắt góc (mm) <span id="cornerSizeHint" style="color:#aaa;font-size:10px">thường 2-8mm (chuẩn JahooPak, 45°)</span></label>
+      <input id="cornerSize" type="number" value="6" oninput="render()">
     </div>
 
     <div class="sec"><b>5</b> Thông tin hiển thị trên bản vẽ</div>
@@ -315,6 +315,24 @@ function applyLipPreset(){
   render();
 }
 function onLipManual(){ $('lipPreset').value='custom'; render(); }
+
+/* ===== KIỂU GÓC — kích thước chuẩn theo JahooPak (khác nhau theo kiểu) ===== */
+// Corner Cut/Square Cut/Round Cut: mép cắt nhỏ chỉ để 2 tai liền kề không đè lên nhau (2-8mm, 45°).
+// Corner Lock: móc khóa cần đủ lớn để cài được vào nhau, gần bằng độ sâu tai (60-100mm).
+const CORNER_SIZE_DEFAULT={square:0,cut:6,squarecut:6,round:6,lock:70};
+const CORNER_SIZE_HINT={
+  square:'không áp dụng',
+  cut:'thường 2-8mm (chuẩn JahooPak, 45°)',
+  squarecut:'thường 2-8mm (chuẩn JahooPak)',
+  round:'thường 2-8mm (chuẩn JahooPak)',
+  lock:'thường 60-100mm (gần bằng độ sâu tai)'
+};
+function onCornerStyleChange(){
+  const style=$('cornerStyle').value;
+  if(CORNER_SIZE_DEFAULT[style]) $('cornerSize').value=CORNER_SIZE_DEFAULT[style];
+  $('cornerSizeHint').textContent=CORNER_SIZE_HINT[style]||'';
+  render();
+}
 
 /* ===== HÌNH HỌC ===== */
 function activeLips(){
