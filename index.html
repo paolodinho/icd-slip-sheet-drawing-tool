@@ -394,7 +394,8 @@ function buildOutline(){
   // BL: incoming=bottom(h), outgoing=left(v) -> firstAxis h
   const dualBL = lips.bottom && lips.left;
   pts.push(...cornerPts(x0,y1, 1, -1, c, dualBL?style:'square','h'));
-  return {pts, x0,x1,y0,y1, L,W, lips};
+  const hasCut = style!=='square' && (dualTL||dualTR||dualBR||dualBL);
+  return {pts, x0,x1,y0,y1, L,W, lips, cornerStyle:style, cornerSizeVal:c, hasCut};
 }
 
 /* ===== VẼ DIMENSION (mũi tên 2 đầu, kiểu bản vẽ kỹ thuật) ===== */
@@ -496,19 +497,71 @@ function drawInfoRow(ctx,cx,y,segments){
   });
 }
 
+/* ===== CHI TIẾT GÓC CẮT (phóng to) — minh hoạ cho khách dễ hình dung, vì kích thước cắt
+   thật (2-8mm) quá nhỏ để thấy rõ trên bản vẽ chính (tỉ lệ ~1100mm). Dùng lại ĐÚNG hàm
+   cornerPts() nên hình luôn khớp 100% với đường cắt thật trên bản vẽ chính, không vẽ tay riêng. ===== */
+const CORNER_STYLE_LABEL={cut:'Cắt chéo (Corner Cut)',squarecut:'Cắt vuông bậc (Square Cut)',round:'Bo tròn (Round Cut)',lock:'Khóa góc (Corner Lock)'};
+function drawCornerDetail(ctx,g,mainH,detailH,cvW){
+  const style=g.cornerStyle, c=g.cornerSizeVal;
+  const boxX=150, boxY=mainH+16, boxW=cvW-boxX*2, boxH=detailH-32;
+
+  ctx.save();
+  ctx.strokeStyle='#D8DCE0'; ctx.lineWidth=1.3; ctx.strokeRect(boxX+0.5,boxY+0.5,boxW,boxH);
+  ctx.textAlign='left'; ctx.fillStyle='#27343A'; ctx.font='bold 15px '+FONT;
+  ctx.fillText('CHI TIẾT GÓC CẮT — '+(CORNER_STYLE_LABEL[style]||''), boxX+18, boxY+26);
+  ctx.font='400 12px '+FONT; ctx.fillStyle='#8A939A';
+  ctx.fillText('Áp dụng tại mọi góc có 2 tai liền kề gặp nhau (hình minh hoạ, không theo tỉ lệ bản vẽ chính)', boxX+18, boxY+44);
+
+  // hình học minh hoạ: chuẩn hoá về góc trên-trái, vẽ bằng đúng cornerPts() thật.
+  // Giới hạn cứng kích thước hình (MAX_CUT) để dù C nhỏ (2mm) hay to (70-100mm, kiểu Khóa góc)
+  // vẫn LUÔN vừa khung — không tính theo "px mỗi mm" thả nổi (dễ tràn khung như bản trước).
+  const MAX_CUT=52, LEG_MULT=1.15;
+  const cutPx=Math.min(MAX_CUT, c*40), legPx=cutPx*LEG_MULT, full=cutPx+legPx;
+  const ox2=boxX+55, oy2=boxY+64;
+
+  ctx.save(); ctx.translate(ox2,oy2);
+  // viền vuông gốc (trước khi cắt) — nét đứt để so sánh
+  ctx.setLineDash([4,4]); ctx.strokeStyle='#C7CCD1'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(full,0); ctx.moveTo(0,0); ctx.lineTo(0,full); ctx.stroke();
+  ctx.setLineDash([]);
+  // đường cắt thật — dùng lại cornerPts() y hệt bản vẽ chính (sx=sy=1, góc trên-trái)
+  const seg=cornerPts(0,0,1,1,cutPx,style,'v');
+  ctx.beginPath(); ctx.moveTo(0,full);
+  seg.forEach(p=>ctx.lineTo(p[0],p[1]));
+  ctx.lineTo(full,0);
+  ctx.lineWidth=2.6; ctx.strokeStyle='#FB7703'; ctx.stroke();
+  ctx.restore();
+
+  // chú thích đặt BÊN PHẢI hình minh hoạ (không đặt bên dưới) để không phụ thuộc chiều cao icon
+  const noteX=ox2+full+50, noteY=oy2+full/2;
+  let note;
+  if(style==='cut') note='C = '+c+'mm  (cắt vát 45°, 2 cạnh bằng nhau)';
+  else if(style==='round') note='R = '+c+'mm  (bo tròn bán kính R)';
+  else if(style==='squarecut') note='C = '+c+'mm  (cắt bậc vuông 90°, 2 cạnh bằng nhau)';
+  else if(style==='lock') note='Kích thước móc: '+c+'mm — cài khớp 2 tai liền kề, không tách rời khi gấp';
+  ctx.textAlign='left'; ctx.textBaseline='middle';
+  ctx.font='bold 14px '+FONT; ctx.fillStyle='#FB7703';
+  ctx.fillText(note||'', noteX, noteY-12);
+  ctx.font='400 12px '+FONT; ctx.fillStyle='#8A939A';
+  ctx.fillText('Nét đứt xám = góc vuông ban đầu · Nét cam = đường cắt thực tế', noteX, noteY+12);
+  ctx.textBaseline='alphabetic';
+  ctx.restore();
+}
+
 function render(){
   const cv=$('sheet'), ctx=cv.getContext('2d');
-  const FOOTER_H=64;
-  cv.width=1400; cv.height=1100+FOOTER_H;
-  ctx.clearRect(0,0,cv.width,cv.height);
+  const FOOTER_H=64, MAIN_H=1100;
   const g=buildOutline();
+  const DETAIL_H = g.hasCut ? 220 : 0;
+  cv.width=1400; cv.height=MAIN_H+DETAIL_H+FOOTER_H;
+  ctx.clearRect(0,0,cv.width,cv.height);
   const m=curColorData();
   const matLabel=curFamily().label+' - '+m.label;
 
-  // vùng vẽ + margin cho dimension lines xung quanh
+  // vùng vẽ + margin cho dimension lines xung quanh (tính theo MAIN_H cố định — khối chi tiết góc cắt/footer không ảnh hưởng khung bản vẽ chính)
   const marginOut=150; // đường cote tổng thể ngoài cùng
   const marginTitle=96;
-  const areaX=marginOut, areaY=marginTitle+marginOut, areaW=cv.width-marginOut*2, areaH=cv.height-FOOTER_H-marginTitle-marginOut*2-80;
+  const areaX=marginOut, areaY=marginTitle+marginOut, areaW=cv.width-marginOut*2, areaH=MAIN_H-FOOTER_H-marginTitle-marginOut*2-80;
   const spanX=g.x1-g.x0, spanY=g.y1-g.y0;
   const s=Math.min(areaW/spanX, areaH/spanY);
   const ox=areaX + (areaW-spanX*s)/2 - g.x0*s;
@@ -568,6 +621,9 @@ function render(){
   ctx.font='bold 26px '+FONT; ctx.textAlign='right'; ctx.fillStyle='#27343A';
   const brP=P(g.x1,g.y1);
   ctx.fillText(n+' Lip'+(n===1?'':'s'), brP.X, brP.Y+40);
+
+  // ==== chi tiết góc cắt (phóng to) — chỉ hiện khi có góc nào đó thực sự bị cắt ====
+  if(g.hasCut) drawCornerDetail(ctx, g, MAIN_H, DETAIL_H, cv.width);
 
   // ==== footer bản quyền: logo + thông tin công ty ICD (luôn nằm trong ảnh xuất ra) ====
   ctx.fillStyle='#27343A'; ctx.fillRect(0, cv.height-FOOTER_H, cv.width, FOOTER_H);
