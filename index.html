@@ -199,6 +199,9 @@ function num(id){return parseFloat($(id).value)||0}
 // Font vẽ trên canvas: chỉ dùng font hệ thống phổ biến (không webfont) để in/xuất PDF
 // luôn giữ đúng bố cục trên mọi máy, không lệch dòng do thiếu font.
 const FONT='Arial, "Helvetica Neue", Helvetica, sans-serif';
+// Ngưỡng px tối thiểu để góc cắt còn NHÌN THẤY trên bản vẽ chính — nhỏ hơn ngưỡng này thì
+// phóng đại riêng đường vẽ (xem render()), giữ nguyên số liệu/nhãn kích thước thật.
+const MIN_CUT_ONSCREEN_PX=13;
 const LOGO=new Image(); let LOGO_OK=false;
 LOGO.onload=()=>{LOGO_OK=true; render();};
 LOGO.src='assets/logo_icd.png';
@@ -375,8 +378,11 @@ function cornerPts(px,py,sx,sy,c,style,firstAxis){
   return [[px,py]];
 }
 
-function buildOutline(){
-  const L=num('innerL'), W=num('innerW'), lipD=num('lipDepth'), c=Math.max(1,num('cornerSize'));
+// cDraw (tuỳ chọn): kích thước dùng để VẼ đường cắt (khác kích thước thật cornerSizeVal)
+// — dùng khi cần phóng đại góc cắt cho thấy rõ trên bản vẽ chính (xem render()).
+function buildOutline(cDraw){
+  const L=num('innerL'), W=num('innerW'), lipD=num('lipDepth'), trueC=Math.max(1,num('cornerSize'));
+  const c = (cDraw!=null) ? cDraw : trueC;
   const lips=activeLips();
   const style=$('cornerStyle').value;
   const x0 = lips.left? -lipD : 0, x1 = lips.right? L+lipD : L;
@@ -395,7 +401,7 @@ function buildOutline(){
   const dualBL = lips.bottom && lips.left;
   pts.push(...cornerPts(x0,y1, 1, -1, c, dualBL?style:'square','h'));
   const hasCut = style!=='square' && (dualTL||dualTR||dualBR||dualBL);
-  return {pts, x0,x1,y0,y1, L,W, lips, cornerStyle:style, cornerSizeVal:c, hasCut};
+  return {pts, x0,x1,y0,y1, L,W, lips, lipDepth:lipD, cornerStyle:style, cornerSizeVal:trueC, hasCut};
 }
 
 /* ===== VẼ DIMENSION (mũi tên 2 đầu, kiểu bản vẽ kỹ thuật) ===== */
@@ -568,6 +574,16 @@ function render(){
   const oy=areaY + (areaH-spanY*s)/2 - g.y0*s;
   const P=(x,y)=>({X:ox+x*s, Y:oy+y*s});
 
+  // Góc cắt thật (2-8mm) ở tỉ lệ bản vẽ chính có thể chỉ còn vài px, mắt thường không thấy được.
+  // Phóng đại RIÊNG đường vẽ (không đổi kích thước thật/nhãn) để luôn thấy rõ trên bản vẽ chính,
+  // giống quy ước bản vẽ kỹ thuật khi chi tiết nhỏ được vẽ to hơn thật + ghi chú "không theo tỉ lệ".
+  if(g.hasCut && g.cornerSizeVal*s < MIN_CUT_ONSCREEN_PX){
+    const capMM = g.lipDepth ? g.lipDepth*0.4 : g.cornerSizeVal;
+    const visualC = Math.min(capMM, MIN_CUT_ONSCREEN_PX/s);
+    g.pts = buildOutline(visualC).pts;
+    g.cornerExaggerated = true;
+  }
+
   // ==== khối sheet (outline chính) — bản vẽ kỹ thuật chuẩn: nét đen trắng, KHÔNG tô màu vật liệu thật
   // (màu thật chỉ ghi chú bằng ô mẫu màu + text bên dưới tiêu đề, xem khối "chú thích màu" phía dưới)
   ctx.beginPath();
@@ -621,6 +637,11 @@ function render(){
   ctx.font='bold 26px '+FONT; ctx.textAlign='right'; ctx.fillStyle='#27343A';
   const brP=P(g.x1,g.y1);
   ctx.fillText(n+' Lip'+(n===1?'':'s'), brP.X, brP.Y+40);
+
+  if(g.cornerExaggerated){
+    ctx.font='italic 12px '+FONT; ctx.textAlign='left'; ctx.fillStyle='#8A939A';
+    ctx.fillText('* Góc cắt vẽ phóng to cho dễ thấy — xem kích thước thật ở khối "Chi tiết góc cắt" bên dưới', P(g.x0,g.y1).X, brP.Y+66);
+  }
 
   // ==== chi tiết góc cắt (phóng to) — chỉ hiện khi có góc nào đó thực sự bị cắt ====
   if(g.hasCut) drawCornerDetail(ctx, g, MAIN_H, DETAIL_H, cv.width);
