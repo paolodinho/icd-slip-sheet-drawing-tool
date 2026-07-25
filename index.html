@@ -327,13 +327,14 @@ const CORNER_SIZE_HINT={
   square:'không áp dụng',
   cut:'thường 2-8mm (chuẩn JahooPak, 45°)',
   squarecut:'thường 2-8mm (chuẩn JahooPak)',
-  round:'thường 2-8mm (chuẩn JahooPak)',
+  round:'không dùng — bo tròn lấy bán kính = Độ sâu tai (mục 3 ở trên)',
   lock:'thường 60-100mm (gần bằng độ sâu tai)'
 };
 function onCornerStyleChange(){
   const style=$('cornerStyle').value;
   if(CORNER_SIZE_DEFAULT[style]) $('cornerSize').value=CORNER_SIZE_DEFAULT[style];
   $('cornerSizeHint').textContent=CORNER_SIZE_HINT[style]||'';
+  $('cornerSize').disabled = (style==='square' || style==='round');
   render();
 }
 
@@ -354,12 +355,26 @@ function cornerPts(px,py,sx,sy,c,style,firstAxis){
     return firstAxis==='v' ? [V,mid,H] : [H,mid,V];
   }
   if(style==='round'){
-    const cx=px+sx*c, cy=py+sy*c, pts=[];
-    const a0 = firstAxis==='v' ? Math.atan2(V[1]-cy,V[0]-cx) : Math.atan2(H[1]-cy,H[0]-cx);
-    const a1 = firstAxis==='v' ? Math.atan2(H[1]-cy,H[0]-cx) : Math.atan2(V[1]-cy,V[0]-cx);
-    let da=a1-a0; while(da>Math.PI)da-=2*Math.PI; while(da<-Math.PI)da+=2*Math.PI;
-    for(let i=0;i<=6;i++){const a=a0+da*i/6; pts.push([cx+c*Math.cos(a), cy+c*Math.sin(a)]);}
-    return pts;
+    // Bo tròn TỪNG TAI RIÊNG (không bo chung 1 cung cho cả 2 tai như trước). Mỗi tai có
+    // cung riêng, bán kính = độ sâu tai (c truyền vào từ buildOutline = lipDepth cho style
+    // này) — điểm nối giữa 2 cung CHÍNH LÀ góc lòng trong (điểm px+sx*c,py+sy*c khi c=lipDepth
+    // trùng khớp góc lòng trong thật), đúng theo mẫu JahooPak: "bo từng tai kéo, điểm đầu bo
+    // là điểm góc ở lòng trong".
+    const IC=[px+sx*c, py+sy*c];
+    const centerH=[px+sx*2*c, py+sy*c], tangentH=[px+sx*2*c, py];
+    const centerV=[px+sx*c, py+sy*2*c], tangentV=[px, py+sy*2*c];
+    const arcPts=(center,from,to)=>{
+      const a0=Math.atan2(from[1]-center[1],from[0]-center[0]);
+      let a1=Math.atan2(to[1]-center[1],to[0]-center[0]);
+      let da=a1-a0; while(da>Math.PI)da-=2*Math.PI; while(da<-Math.PI)da+=2*Math.PI;
+      const out=[];
+      for(let i=0;i<=6;i++){const a=a0+da*i/6; out.push([center[0]+c*Math.cos(a), center[1]+c*Math.sin(a)]);}
+      return out;
+    };
+    const arcV=arcPts(centerV, tangentV, IC); // tai theo trục dọc: mép tai -> góc lòng trong
+    const arcH=arcPts(centerH, IC, tangentH); // tai theo trục ngang: góc lòng trong -> mép tai
+    if(firstAxis==='v') return [...arcV, ...arcH.slice(1)];
+    return [...[...arcH].reverse(), ...[...arcV].reverse().slice(1)];
   }
   if(style==='lock'){
     // viền thẳng theo mép tai (không vát chéo) tới sát góc, có 1 bậc nhỏ + móc bo tròn khóa 2 tai vào nhau
@@ -382,9 +397,12 @@ function cornerPts(px,py,sx,sy,c,style,firstAxis){
 // — dùng khi cần phóng đại góc cắt cho thấy rõ trên bản vẽ chính (xem render()).
 function buildOutline(cDraw){
   const L=num('innerL'), W=num('innerW'), lipD=num('lipDepth'), trueC=Math.max(1,num('cornerSize'));
-  const c = (cDraw!=null) ? cDraw : trueC;
-  const lips=activeLips();
   const style=$('cornerStyle').value;
+  // Bo tròn (Round Cut) KHÔNG dùng ô "kích thước cắt góc" — bán kính bo = độ sâu tai
+  // (mỗi tai bo riêng, cung chạm đúng góc lòng trong). Xem cornerPts() nhánh 'round'.
+  const trueRadius = style==='round' ? lipD : trueC;
+  const c = (cDraw!=null) ? cDraw : trueRadius;
+  const lips=activeLips();
   const x0 = lips.left? -lipD : 0, x1 = lips.right? L+lipD : L;
   const y0 = lips.top? -lipD : 0, y1 = lips.bottom? W+lipD : W;
   const pts=[];
@@ -401,7 +419,7 @@ function buildOutline(cDraw){
   const dualBL = lips.bottom && lips.left;
   pts.push(...cornerPts(x0,y1, 1, -1, c, dualBL?style:'square','h'));
   const hasCut = style!=='square' && (dualTL||dualTR||dualBR||dualBL);
-  return {pts, x0,x1,y0,y1, L,W, lips, lipDepth:lipD, cornerStyle:style, cornerSizeVal:trueC, hasCut};
+  return {pts, x0,x1,y0,y1, L,W, lips, lipDepth:lipD, cornerStyle:style, cornerSizeVal:trueRadius, hasCut};
 }
 
 /* ===== VẼ DIMENSION (mũi tên 2 đầu, kiểu bản vẽ kỹ thuật) ===== */
@@ -577,7 +595,9 @@ function render(){
   // Góc cắt thật (2-8mm) ở tỉ lệ bản vẽ chính có thể chỉ còn vài px, mắt thường không thấy được.
   // Phóng đại RIÊNG đường vẽ (không đổi kích thước thật/nhãn) để luôn thấy rõ trên bản vẽ chính,
   // giống quy ước bản vẽ kỹ thuật khi chi tiết nhỏ được vẽ to hơn thật + ghi chú "không theo tỉ lệ".
-  if(g.hasCut && g.cornerSizeVal*s < MIN_CUT_ONSCREEN_PX){
+  // Bo tròn dùng bán kính = độ sâu tai (luôn đủ lớn để thấy rõ) — không cần phóng đại,
+  // và phóng đại sẽ làm lệch điểm chạm góc lòng trong (xem cornerPts nhánh 'round').
+  if(g.hasCut && g.cornerStyle!=='round' && g.cornerSizeVal*s < MIN_CUT_ONSCREEN_PX){
     const capMM = g.lipDepth ? g.lipDepth*0.4 : g.cornerSizeVal;
     const visualC = Math.min(capMM, MIN_CUT_ONSCREEN_PX/s);
     g.pts = buildOutline(visualC).pts;
@@ -593,15 +613,24 @@ function render(){
   ctx.lineWidth=2.6; ctx.strokeStyle='#27343A'; ctx.stroke();
 
   // ==== đường nét đứt phân tách lòng trong / tai (chỉ vẽ cạnh có tai) ====
+  // Kéo dài lằn (crease) ra tới đúng mép cắt góc (x0/x1/y0/y1) thay vì dừng ở góc lòng trong
+  // (0,0 hoặc L,W) — để lằn nằm TRÊN đường cắt góc, không dừng hụt trước nó (feedback JahooPak).
+  // Riêng kiểu Bo tròn (round): cung bo đã chạm ĐÚNG góc lòng trong (xem cornerPts 'round'),
+  // nên lằn giữ nguyên độ dài gốc (0..L / 0..W) — kéo dài thêm sẽ xuyên qua phần đã bị cắt.
   const dashColor='#27343A';
   ctx.setLineDash([7,5]); ctx.strokeStyle=dashColor; ctx.lineWidth=2;
-  const innerCorners={ // 4 góc lòng trong
-    tl:P(0,0), tr:P(g.L,0), br:P(g.L,g.W), bl:P(0,g.W)
-  };
-  if(g.lips.top){ctx.beginPath();ctx.moveTo(innerCorners.tl.X,innerCorners.tl.Y);ctx.lineTo(innerCorners.tr.X,innerCorners.tr.Y);ctx.stroke();}
-  if(g.lips.bottom){ctx.beginPath();ctx.moveTo(innerCorners.bl.X,innerCorners.bl.Y);ctx.lineTo(innerCorners.br.X,innerCorners.br.Y);ctx.stroke();}
-  if(g.lips.left){ctx.beginPath();ctx.moveTo(innerCorners.tl.X,innerCorners.tl.Y);ctx.lineTo(innerCorners.bl.X,innerCorners.bl.Y);ctx.stroke();}
-  if(g.lips.right){ctx.beginPath();ctx.moveTo(innerCorners.tr.X,innerCorners.tr.Y);ctx.lineTo(innerCorners.br.X,innerCorners.br.Y);ctx.stroke();}
+  const noExtend = g.cornerStyle==='round';
+  const dualTL=g.lips.top&&g.lips.left, dualTR=g.lips.top&&g.lips.right;
+  const dualBR=g.lips.bottom&&g.lips.right, dualBL=g.lips.bottom&&g.lips.left;
+  const topX0=(dualTL&&!noExtend)?g.x0:0, topX1=(dualTR&&!noExtend)?g.x1:g.L;
+  const botX0=(dualBL&&!noExtend)?g.x0:0, botX1=(dualBR&&!noExtend)?g.x1:g.L;
+  const leftY0=(dualTL&&!noExtend)?g.y0:0, leftY1=(dualBL&&!noExtend)?g.y1:g.W;
+  const rightY0=(dualTR&&!noExtend)?g.y0:0, rightY1=(dualBR&&!noExtend)?g.y1:g.W;
+  const line=(x0,y0,x1,y1)=>{const a=P(x0,y0),b=P(x1,y1);ctx.beginPath();ctx.moveTo(a.X,a.Y);ctx.lineTo(b.X,b.Y);ctx.stroke();};
+  if(g.lips.top) line(topX0,0,topX1,0);
+  if(g.lips.bottom) line(botX0,g.W,botX1,g.W);
+  if(g.lips.left) line(0,leftY0,0,leftY1);
+  if(g.lips.right) line(g.L,rightY0,g.L,rightY1);
   ctx.setLineDash([]);
 
   // ==== dimension: tổng thể trên (x0->x1) và trái (y0->y1) ====
