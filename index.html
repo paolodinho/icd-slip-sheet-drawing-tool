@@ -479,6 +479,32 @@ function dimV(ctx,P,y1,y2,x,dimX,label,horizText){
   }
 }
 
+/* ===== Chú giải các loại đường trên bản vẽ — phân biệt rõ đường cắt / đường gấp / đường
+   gióng kích thước (KHÔNG PHẢI đường cắt), tránh nhầm khi thợ/khách đọc bản vẽ. ===== */
+function drawLineLegend(ctx,cx,y){
+  const items=[
+    {sample:'solid', color:'#27343A', lw:2.6, label:'Đường cắt — viền ngoài tấm (cắt đứt theo đường này)'},
+    {sample:'dash',  color:'#27343A', lw:2,   dash:[7,5], label:'Đường gấp — lằn gấp giữa lòng trong và tai (không cắt)'},
+    {sample:'dash',  color:'#8A939A', lw:1,   dash:[3,3], label:'Đường gióng kích thước — chỉ để đo, không phải đường cắt'}
+  ];
+  const sampleW=30, gapAfterSample=8, gapBetween=28;
+  ctx.font='600 12px '+FONT; ctx.textBaseline='middle'; ctx.textAlign='left';
+  const widths=items.map(it=>sampleW+gapAfterSample+ctx.measureText(it.label).width);
+  const totalW=widths.reduce((s,w)=>s+w,0)+gapBetween*(items.length-1);
+  let x=cx-totalW/2;
+  items.forEach((it,i)=>{
+    const ly=y;
+    ctx.save();
+    ctx.strokeStyle=it.color; ctx.lineWidth=it.lw;
+    if(it.dash) ctx.setLineDash(it.dash); else ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(x,ly); ctx.lineTo(x+sampleW,ly); ctx.stroke();
+    ctx.restore();
+    ctx.fillStyle='#4A545C'; ctx.font='600 12px '+FONT;
+    ctx.fillText(it.label, x+sampleW+gapAfterSample, ly);
+    x+=widths[i]+gapBetween;
+  });
+}
+
 /* ===== Hàng thông số dưới tiêu đề (title block): các mục cách nhau bằng gạch dọc
    mảnh, canh giữa cả hàng - thay cho kiểu nối chuỗi "A | B | C" dày đặc trước đây. ===== */
 function drawInfoRow(ctx,cx,y,segments){
@@ -584,7 +610,7 @@ function render(){
 
   // vùng vẽ + margin cho dimension lines xung quanh (tính theo MAIN_H cố định — khối chi tiết góc cắt/footer không ảnh hưởng khung bản vẽ chính)
   const marginOut=150; // đường cote tổng thể ngoài cùng
-  const marginTitle=96;
+  const marginTitle=118; // chừa chỗ cho hàng chú giải loại đường (xem drawLineLegend)
   const areaX=marginOut, areaY=marginTitle+marginOut, areaW=cv.width-marginOut*2, areaH=MAIN_H-FOOTER_H-marginTitle-marginOut*2-80;
   const spanX=g.x1-g.x0, spanY=g.y1-g.y0;
   const s=Math.min(areaW/spanX, areaH/spanY);
@@ -661,6 +687,7 @@ function render(){
     {type:'text', label:'Tải trọng', value:$('loadNote').value+'kg'},
     {type:'text', label:'Tái sử dụng', value:$('reuseNote').value}
   ]);
+  drawLineLegend(ctx, cv.width/2, 94);
 
   const n=countLips();
   ctx.font='bold 26px '+FONT; ctx.textAlign='right'; ctx.fillStyle='#27343A';
