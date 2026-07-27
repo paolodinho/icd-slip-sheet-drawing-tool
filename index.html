@@ -320,23 +320,22 @@ function applyLipPreset(){
 function onLipManual(){ $('lipPreset').value='custom'; render(); }
 
 /* ===== KIỂU GÓC — kích thước chuẩn theo JahooPak (khác nhau theo kiểu) ===== */
-// Góc ĐÔI (2 tai liền kề gặp nhau): Cắt chéo/Cắt vuông bậc/Bo tròn LUÔN vát/bo LỚN = độ sâu
-// tai, chạm đúng góc lòng trong (không dùng ô này) — trừ Khóa góc (móc cài) dùng đúng ô này.
-// Góc SOLO (chỉ 1 tai, không có tai liền kề): mọi kiểu (trừ Khóa góc — không áp cho 1 tai đơn
-// độc) đều dùng ô "kích thước cắt góc" này làm độ vát nhỏ (2-8mm, 45°/bo nhẹ ở đầu tai).
+// Cắt chéo/Cắt vuông bậc/Bo tròn: MỌI góc (đôi lẫn solo) đều vát/bo chạm đúng lằn gấp, bán
+// kính = Độ sâu tai — ô "kích thước cắt góc" KHÔNG dùng cho 3 kiểu này nữa (mục 3 ở trên mới
+// là nơi chỉnh kích thước). Chỉ Khóa góc (móc cài, chỉ áp cho góc đôi) dùng đúng ô này.
 const CORNER_SIZE_DEFAULT={square:0,cut:6,squarecut:6,round:6,lock:70};
 const CORNER_SIZE_HINT={
   square:'không áp dụng',
-  cut:'áp dụng cho góc solo (1 tai) — thường 2-8mm, 45°. Góc đôi tự động = Độ sâu tai',
-  squarecut:'áp dụng cho góc solo (1 tai) — thường 2-8mm. Góc đôi tự động = Độ sâu tai',
-  round:'áp dụng cho góc solo (1 tai) — thường 2-8mm. Góc đôi tự động = Độ sâu tai',
+  cut:'không dùng — vát chạm lằn gấp, lấy bán kính = Độ sâu tai (mục 3 ở trên)',
+  squarecut:'không dùng — vát chạm lằn gấp, lấy bán kính = Độ sâu tai (mục 3 ở trên)',
+  round:'không dùng — bo chạm lằn gấp, lấy bán kính = Độ sâu tai (mục 3 ở trên)',
   lock:'thường 60-100mm (gần bằng độ sâu tai) — chỉ áp cho góc đôi'
 };
 function onCornerStyleChange(){
   const style=$('cornerStyle').value;
   if(CORNER_SIZE_DEFAULT[style]) $('cornerSize').value=CORNER_SIZE_DEFAULT[style];
   $('cornerSizeHint').textContent=CORNER_SIZE_HINT[style]||'';
-  $('cornerSize').disabled = (style==='square');
+  $('cornerSize').disabled = (style!=='lock');
   render();
 }
 
@@ -396,24 +395,32 @@ function cornerPts(px,py,sx,sy,c,style,firstAxis){
   return [[px,py]];
 }
 
-// Góc CHỈ CÓ 1 TAI (không có tai liền kề để tạo "điểm giao nhau 2 nếp gấp" mà vát tới) —
-// vẫn vát/bo theo đúng kiểu đã chọn (đồng bộ mọi góc của tai, theo yêu cầu JahooPak) nhưng
-// dùng độ vát NHỎ (kích thước cắt góc, không phụ thuộc lipDepth) — 1 cung/1 nếp vát đơn giản
-// tiếp tuyến 2 cạnh, KHÔNG có khái niệm "chạm góc lòng trong" vì chỉ có 1 nếp gấp ở đây.
-function cornerPtsSolo(px,py,sx,sy,c,style,firstAxis){
-  const V=[px, py+sy*c], H=[px+sx*c, py];
+// Góc CHỈ CÓ 1 TAI (solo, không có tai liền kề) — KHÔNG có "điểm giao 2 nếp gấp" (chỉ 1 nếp
+// gấp thật ở góc này), nhưng vẫn phải vát/bo CHẠM ĐƯỢC lằn gấp đó (yêu cầu Hiếu 2026-07-27:
+// "đã vát là vát tất cả góc của tai... cũng phải giao với điểm nếp gấp"). c = ĐỘ SÂU TAI —
+// điểm foldPt luôn rơi đúng vào lằn gấp thật (vì đỉnh góc ngoài cách lằn gấp đúng 1 khoảng
+// = độ sâu tai theo trục có tai). realAxis: 'h' = tai thật nằm ở trục ngang (trên/dưới —
+// dùng py+sy*c làm điểm gấp), 'v' = tai thật ở trục dọc (trái/phải — dùng px+sx*c).
+function cornerPtsSoloFold(px,py,sx,sy,c,style,firstAxis,realAxis){
   if(style==='square') return [[px,py]];
-  if(style==='cut') return firstAxis==='v' ? [V,H] : [H,V];
+  const foldPt=realAxis==='h' ? [px, py+sy*c] : [px+sx*c, py];
+  const outerPt=realAxis==='h' ? [px+sx*c, py] : [px, py+sy*c];
+  // Điểm ở đúng trục có tai thật (outerPt) giữ nguyên vị trí của nó trong path (đầu/cuối) theo
+  // firstAxis như các góc khác; điểm còn lại (foldPt, thay cho trục KHÔNG có tai) lấp chỗ trống.
+  const firstIsOuter = (firstAxis==='v')===(realAxis==='v');
+  const first = firstIsOuter ? outerPt : foldPt;
+  const second = firstIsOuter ? foldPt : outerPt;
+  if(style==='cut') return [first,second];
   if(style==='squarecut'){
     const mid=[px+sx*c, py+sy*c];
-    return firstAxis==='v' ? [V,mid,H] : [H,mid,V];
+    return [first,mid,second];
   }
   if(style==='round'){
-    const cx=px+sx*c, cy=py+sy*c, pts=[];
-    const a0 = firstAxis==='v' ? Math.atan2(V[1]-cy,V[0]-cx) : Math.atan2(H[1]-cy,H[0]-cx);
-    const a1 = firstAxis==='v' ? Math.atan2(H[1]-cy,H[0]-cx) : Math.atan2(V[1]-cy,V[0]-cx);
+    const center=[px+sx*c, py+sy*c], pts=[];
+    const a0=Math.atan2(first[1]-center[1],first[0]-center[0]);
+    let a1=Math.atan2(second[1]-center[1],second[0]-center[0]);
     let da=a1-a0; while(da>Math.PI)da-=2*Math.PI; while(da<-Math.PI)da+=2*Math.PI;
-    for(let i=0;i<=6;i++){const a=a0+da*i/6; pts.push([cx+c*Math.cos(a), cy+c*Math.sin(a)]);}
+    for(let i=0;i<=6;i++){const a=a0+da*i/6; pts.push([center[0]+c*Math.cos(a), center[1]+c*Math.sin(a)]);}
     return pts;
   }
   return [[px,py]];
@@ -428,7 +435,8 @@ function buildOutline(cDraw){
   // trong (điểm giao nhau 2 nếp gấp) — trừ Khóa góc (móc cài, dùng kích thước riêng ở ô
   // "kích thước cắt góc"). Góc CHỈ 1 TAI (solo, không có tai liền kề): vẫn vát theo đúng kiểu
   // đã chọn (đồng bộ mọi góc của tai — yêu cầu JahooPak "đã vát là vát tất cả góc của tai"),
-  // nhưng dùng độ vát NHỎ (ô "kích thước cắt góc") vì không có nếp gấp thứ 2 để chạm tới.
+  // và CŨNG phải chạm được lằn gấp thật của tai đó (Hiếu xác nhận 2026-07-27) — nên cũng dùng
+  // bán kính = độ sâu tai (không dùng ô "kích thước cắt góc" nữa cho cả 2 loại góc).
   // Khóa góc là cơ chế móc cài — chỉ có nghĩa khi THẬT SỰ có 2 tai để khóa vào nhau, nên góc
   // solo dưới kiểu Khóa góc giữ nguyên vuông (không áp móc cho 1 tai đơn độc).
   const dualRadius = (cDraw!=null) ? cDraw : (style==='lock' ? trueC : lipD);
@@ -436,9 +444,11 @@ function buildOutline(cDraw){
   const lips=activeLips();
   const x0 = lips.left? -lipD : 0, x1 = lips.right? L+lipD : L;
   const y0 = lips.top? -lipD : 0, y1 = lips.bottom? W+lipD : W;
+  // hasLipA = tai trục NGANG (trên/dưới) của góc này, hasLipB = tai trục DỌC (trái/phải) —
+  // đúng thứ tự này ở CẢ 4 góc (xem 4 lời gọi cornerAt bên dưới) nên solo dùng được thẳng.
   const cornerAt=(px,py,sx,sy,hasLipA,hasLipB,firstAxis)=>{
     if(hasLipA && hasLipB) return cornerPts(px,py,sx,sy,dualRadius,style,firstAxis);
-    if(hasLipA || hasLipB) return cornerPtsSolo(px,py,sx,sy,trueC,soloStyle,firstAxis);
+    if(hasLipA || hasLipB) return cornerPtsSoloFold(px,py,sx,sy,lipD,soloStyle,firstAxis,hasLipA?'h':'v');
     return [[px,py]];
   };
   const pts=[];
