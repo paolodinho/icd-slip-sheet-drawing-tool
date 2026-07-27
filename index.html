@@ -320,21 +320,23 @@ function applyLipPreset(){
 function onLipManual(){ $('lipPreset').value='custom'; render(); }
 
 /* ===== KIỂU GÓC — kích thước chuẩn theo JahooPak (khác nhau theo kiểu) ===== */
-// Corner Cut/Square Cut/Round Cut: mép cắt nhỏ chỉ để 2 tai liền kề không đè lên nhau (2-8mm, 45°).
-// Corner Lock: móc khóa cần đủ lớn để cài được vào nhau, gần bằng độ sâu tai (60-100mm).
+// Góc ĐÔI (2 tai liền kề gặp nhau): Cắt chéo/Cắt vuông bậc/Bo tròn LUÔN vát/bo LỚN = độ sâu
+// tai, chạm đúng góc lòng trong (không dùng ô này) — trừ Khóa góc (móc cài) dùng đúng ô này.
+// Góc SOLO (chỉ 1 tai, không có tai liền kề): mọi kiểu (trừ Khóa góc — không áp cho 1 tai đơn
+// độc) đều dùng ô "kích thước cắt góc" này làm độ vát nhỏ (2-8mm, 45°/bo nhẹ ở đầu tai).
 const CORNER_SIZE_DEFAULT={square:0,cut:6,squarecut:6,round:6,lock:70};
 const CORNER_SIZE_HINT={
   square:'không áp dụng',
-  cut:'thường 2-8mm (chuẩn JahooPak, 45°)',
-  squarecut:'thường 2-8mm (chuẩn JahooPak)',
-  round:'không dùng — bo tròn lấy bán kính = Độ sâu tai (mục 3 ở trên)',
-  lock:'thường 60-100mm (gần bằng độ sâu tai)'
+  cut:'áp dụng cho góc solo (1 tai) — thường 2-8mm, 45°. Góc đôi tự động = Độ sâu tai',
+  squarecut:'áp dụng cho góc solo (1 tai) — thường 2-8mm. Góc đôi tự động = Độ sâu tai',
+  round:'áp dụng cho góc solo (1 tai) — thường 2-8mm. Góc đôi tự động = Độ sâu tai',
+  lock:'thường 60-100mm (gần bằng độ sâu tai) — chỉ áp cho góc đôi'
 };
 function onCornerStyleChange(){
   const style=$('cornerStyle').value;
   if(CORNER_SIZE_DEFAULT[style]) $('cornerSize').value=CORNER_SIZE_DEFAULT[style];
   $('cornerSizeHint').textContent=CORNER_SIZE_HINT[style]||'';
-  $('cornerSize').disabled = (style==='square' || style==='round');
+  $('cornerSize').disabled = (style==='square');
   render();
 }
 
@@ -344,25 +346,26 @@ function activeLips(){
 }
 function countLips(){const l=activeLips();return (l.top?1:0)+(l.right?1:0)+(l.bottom?1:0)+(l.left?1:0);}
 
-// điểm cắt góc (corner) tại điểm nhọn (px,py), hướng vào trong (sx,sy)=+-1, thứ tự [đầu,cuối] theo path
+// điểm cắt góc (corner) TẠI GÓC CÓ 2 TAI LIỀN KỀ (dual) — c truyền vào = ĐỘ SÂU TAI (lipDepth,
+// trừ kiểu Khóa góc dùng kích thước riêng). Vát/bo TỪNG TAI RIÊNG (không chung 1 đường cho cả 2
+// tai), điểm nối giữa 2 phần luôn CHẠM ĐÚNG góc lòng trong (điểm giao nhau 2 nếp gấp) — đúng theo
+// mẫu JahooPak: "vát ở điểm giao nhau 2 nếp gấp". (px,py)=điểm nhọn góc ngoài, (sx,sy)=+-1 hướng
+// vào trong, thứ tự [đầu,cuối] theo path.
 function cornerPts(px,py,sx,sy,c,style,firstAxis){
   // firstAxis: 'v' nghĩa là điểm đầu tiên lệch theo trục dọc (y), rồi tới điểm lệch trục ngang (x). 'h' thì ngược lại.
   const V=[px, py+sy*c], H=[px+sx*c, py];
   if(style==='square') return [[px,py]];
-  if(style==='cut') return firstAxis==='v' ? [V,H] : [H,V];
-  if(style==='squarecut'){
-    const mid=[px+sx*c, py+sy*c];
-    return firstAxis==='v' ? [V,mid,H] : [H,mid,V];
-  }
+  // Điểm mép tai (tiếp tuyến) lệch 2*c từ đỉnh góc ngoài — đường/cung nối 2 điểm này LUÔN đi
+  // qua đúng góc lòng trong IC=(px+sx*c,py+sy*c) (trung điểm khi c bằng nhau 2 trục).
+  const IC=[px+sx*c, py+sy*c];
+  const tangentH=[px+sx*2*c, py], tangentV=[px, py+sy*2*c];
+  if(style==='cut') return firstAxis==='v' ? [tangentV,tangentH] : [tangentH,tangentV];
+  if(style==='squarecut') return firstAxis==='v' ? [tangentV,IC,tangentH] : [tangentH,IC,tangentV];
   if(style==='round'){
     // Bo tròn TỪNG TAI RIÊNG (không bo chung 1 cung cho cả 2 tai như trước). Mỗi tai có
-    // cung riêng, bán kính = độ sâu tai (c truyền vào từ buildOutline = lipDepth cho style
-    // này) — điểm nối giữa 2 cung CHÍNH LÀ góc lòng trong (điểm px+sx*c,py+sy*c khi c=lipDepth
-    // trùng khớp góc lòng trong thật), đúng theo mẫu JahooPak: "bo từng tai kéo, điểm đầu bo
-    // là điểm góc ở lòng trong".
-    const IC=[px+sx*c, py+sy*c];
-    const centerH=[px+sx*2*c, py+sy*c], tangentH=[px+sx*2*c, py];
-    const centerV=[px+sx*c, py+sy*2*c], tangentV=[px, py+sy*2*c];
+    // cung riêng, bán kính = độ sâu tai — điểm nối giữa 2 cung CHÍNH LÀ góc lòng trong, đúng
+    // theo mẫu JahooPak: "bo từng tai kéo, điểm đầu bo là điểm góc ở lòng trong".
+    const centerH=[px+sx*2*c, py+sy*c], centerV=[px+sx*c, py+sy*2*c];
     const arcPts=(center,from,to)=>{
       const a0=Math.atan2(from[1]-center[1],from[0]-center[0]);
       let a1=Math.atan2(to[1]-center[1],to[0]-center[0]);
@@ -393,33 +396,67 @@ function cornerPts(px,py,sx,sy,c,style,firstAxis){
   return [[px,py]];
 }
 
-// cDraw (tuỳ chọn): kích thước dùng để VẼ đường cắt (khác kích thước thật cornerSizeVal)
+// Góc CHỈ CÓ 1 TAI (không có tai liền kề để tạo "điểm giao nhau 2 nếp gấp" mà vát tới) —
+// vẫn vát/bo theo đúng kiểu đã chọn (đồng bộ mọi góc của tai, theo yêu cầu JahooPak) nhưng
+// dùng độ vát NHỎ (kích thước cắt góc, không phụ thuộc lipDepth) — 1 cung/1 nếp vát đơn giản
+// tiếp tuyến 2 cạnh, KHÔNG có khái niệm "chạm góc lòng trong" vì chỉ có 1 nếp gấp ở đây.
+function cornerPtsSolo(px,py,sx,sy,c,style,firstAxis){
+  const V=[px, py+sy*c], H=[px+sx*c, py];
+  if(style==='square') return [[px,py]];
+  if(style==='cut') return firstAxis==='v' ? [V,H] : [H,V];
+  if(style==='squarecut'){
+    const mid=[px+sx*c, py+sy*c];
+    return firstAxis==='v' ? [V,mid,H] : [H,mid,V];
+  }
+  if(style==='round'){
+    const cx=px+sx*c, cy=py+sy*c, pts=[];
+    const a0 = firstAxis==='v' ? Math.atan2(V[1]-cy,V[0]-cx) : Math.atan2(H[1]-cy,H[0]-cx);
+    const a1 = firstAxis==='v' ? Math.atan2(H[1]-cy,H[0]-cx) : Math.atan2(V[1]-cy,V[0]-cx);
+    let da=a1-a0; while(da>Math.PI)da-=2*Math.PI; while(da<-Math.PI)da+=2*Math.PI;
+    for(let i=0;i<=6;i++){const a=a0+da*i/6; pts.push([cx+c*Math.cos(a), cy+c*Math.sin(a)]);}
+    return pts;
+  }
+  return [[px,py]];
+}
+
+// cDraw (tuỳ chọn): kích thước dùng để VẼ đường cắt góc ĐÔI (khác kích thước thật lipDepth)
 // — dùng khi cần phóng đại góc cắt cho thấy rõ trên bản vẽ chính (xem render()).
 function buildOutline(cDraw){
   const L=num('innerL'), W=num('innerW'), lipD=num('lipDepth'), trueC=Math.max(1,num('cornerSize'));
   const style=$('cornerStyle').value;
-  // Bo tròn (Round Cut) KHÔNG dùng ô "kích thước cắt góc" — bán kính bo = độ sâu tai
-  // (mỗi tai bo riêng, cung chạm đúng góc lòng trong). Xem cornerPts() nhánh 'round'.
-  const trueRadius = style==='round' ? lipD : trueC;
-  const c = (cDraw!=null) ? cDraw : trueRadius;
+  // Góc ĐÔI (2 tai liền kề gặp nhau): vát/bo LỚN, bán kính = độ sâu tai, chạm đúng góc lòng
+  // trong (điểm giao nhau 2 nếp gấp) — trừ Khóa góc (móc cài, dùng kích thước riêng ở ô
+  // "kích thước cắt góc"). Góc CHỈ 1 TAI (solo, không có tai liền kề): vẫn vát theo đúng kiểu
+  // đã chọn (đồng bộ mọi góc của tai — yêu cầu JahooPak "đã vát là vát tất cả góc của tai"),
+  // nhưng dùng độ vát NHỎ (ô "kích thước cắt góc") vì không có nếp gấp thứ 2 để chạm tới.
+  // Khóa góc là cơ chế móc cài — chỉ có nghĩa khi THẬT SỰ có 2 tai để khóa vào nhau, nên góc
+  // solo dưới kiểu Khóa góc giữ nguyên vuông (không áp móc cho 1 tai đơn độc).
+  const dualRadius = (cDraw!=null) ? cDraw : (style==='lock' ? trueC : lipD);
+  const soloStyle = style==='lock' ? 'square' : style;
   const lips=activeLips();
   const x0 = lips.left? -lipD : 0, x1 = lips.right? L+lipD : L;
   const y0 = lips.top? -lipD : 0, y1 = lips.bottom? W+lipD : W;
+  const cornerAt=(px,py,sx,sy,hasLipA,hasLipB,firstAxis)=>{
+    if(hasLipA && hasLipB) return cornerPts(px,py,sx,sy,dualRadius,style,firstAxis);
+    if(hasLipA || hasLipB) return cornerPtsSolo(px,py,sx,sy,trueC,soloStyle,firstAxis);
+    return [[px,py]];
+  };
   const pts=[];
   // TL: incoming=left(v), outgoing=top(h) -> firstAxis v
-  const dualTL = lips.top && lips.left;
-  pts.push(...cornerPts(x0,y0, 1, 1, c, dualTL?style:'square','v'));
+  const dualTL = lips.top && lips.left, hasTL = lips.top || lips.left;
+  pts.push(...cornerAt(x0,y0, 1, 1, lips.top, lips.left, 'v'));
   // TR: incoming=top(h), outgoing=right(v) -> firstAxis h
-  const dualTR = lips.top && lips.right;
-  pts.push(...cornerPts(x1,y0, -1, 1, c, dualTR?style:'square','h'));
+  const dualTR = lips.top && lips.right, hasTR = lips.top || lips.right;
+  pts.push(...cornerAt(x1,y0, -1, 1, lips.top, lips.right, 'h'));
   // BR: incoming=right(v), outgoing=bottom(h) -> firstAxis v
-  const dualBR = lips.bottom && lips.right;
-  pts.push(...cornerPts(x1,y1, -1, -1, c, dualBR?style:'square','v'));
+  const dualBR = lips.bottom && lips.right, hasBR = lips.bottom || lips.right;
+  pts.push(...cornerAt(x1,y1, -1, -1, lips.bottom, lips.right, 'v'));
   // BL: incoming=bottom(h), outgoing=left(v) -> firstAxis h
-  const dualBL = lips.bottom && lips.left;
-  pts.push(...cornerPts(x0,y1, 1, -1, c, dualBL?style:'square','h'));
+  const dualBL = lips.bottom && lips.left, hasBL = lips.bottom || lips.left;
+  pts.push(...cornerAt(x0,y1, 1, -1, lips.bottom, lips.left, 'h'));
   const hasCut = style!=='square' && (dualTL||dualTR||dualBR||dualBL);
-  return {pts, x0,x1,y0,y1, L,W, lips, lipDepth:lipD, cornerStyle:style, cornerSizeVal:trueRadius, hasCut};
+  const hasAnyCorner = style!=='square' && (hasTL||hasTR||hasBR||hasBL);
+  return {pts, x0,x1,y0,y1, L,W, lips, lipDepth:lipD, cornerStyle:style, cornerSizeVal:dualRadius, hasCut, hasAnyCorner};
 }
 
 /* ===== VẼ DIMENSION (mũi tên 2 đầu, kiểu bản vẽ kỹ thuật) ===== */
@@ -621,9 +658,10 @@ function render(){
   // Góc cắt thật (2-8mm) ở tỉ lệ bản vẽ chính có thể chỉ còn vài px, mắt thường không thấy được.
   // Phóng đại RIÊNG đường vẽ (không đổi kích thước thật/nhãn) để luôn thấy rõ trên bản vẽ chính,
   // giống quy ước bản vẽ kỹ thuật khi chi tiết nhỏ được vẽ to hơn thật + ghi chú "không theo tỉ lệ".
-  // Bo tròn dùng bán kính = độ sâu tai (luôn đủ lớn để thấy rõ) — không cần phóng đại,
-  // và phóng đại sẽ làm lệch điểm chạm góc lòng trong (xem cornerPts nhánh 'round').
-  if(g.hasCut && g.cornerStyle!=='round' && g.cornerSizeVal*s < MIN_CUT_ONSCREEN_PX){
+  // Cắt chéo/Cắt vuông bậc/Bo tròn ở góc đôi giờ dùng bán kính = độ sâu tai (luôn đủ lớn để
+  // thấy rõ) — không cần phóng đại, và phóng đại sẽ làm lệch điểm chạm góc lòng trong. Chỉ
+  // Khóa góc (dùng ô "kích thước cắt góc", có thể nhỏ) mới cần cơ chế phóng đại này.
+  if(g.hasCut && g.cornerStyle==='lock' && g.cornerSizeVal*s < MIN_CUT_ONSCREEN_PX){
     const capMM = g.lipDepth ? g.lipDepth*0.4 : g.cornerSizeVal;
     const visualC = Math.min(capMM, MIN_CUT_ONSCREEN_PX/s);
     g.pts = buildOutline(visualC).pts;
@@ -641,11 +679,13 @@ function render(){
   // ==== đường nét đứt phân tách lòng trong / tai (chỉ vẽ cạnh có tai) ====
   // Kéo dài lằn (crease) ra tới đúng mép cắt góc (x0/x1/y0/y1) thay vì dừng ở góc lòng trong
   // (0,0 hoặc L,W) — để lằn nằm TRÊN đường cắt góc, không dừng hụt trước nó (feedback JahooPak).
-  // Riêng kiểu Bo tròn (round): cung bo đã chạm ĐÚNG góc lòng trong (xem cornerPts 'round'),
-  // nên lằn giữ nguyên độ dài gốc (0..L / 0..W) — kéo dài thêm sẽ xuyên qua phần đã bị cắt.
+  // Riêng Cắt chéo/Cắt vuông bậc/Bo tròn ở góc ĐÔI: đường/cung cắt đã chạm ĐÚNG góc lòng trong
+  // (xem cornerPts), nên lằn giữ nguyên độ dài gốc (0..L / 0..W) ở đầu đó — kéo dài thêm sẽ
+  // xuyên qua phần đã bị cắt. Khóa góc (dùng kích thước riêng, không chạm góc lòng trong) và
+  // góc SOLO (1 tai, vát nhỏ gần đỉnh ngoài) thì vẫn kéo dài như cũ.
   const dashColor='#27343A';
   ctx.setLineDash([7,5]); ctx.strokeStyle=dashColor; ctx.lineWidth=2;
-  const noExtend = g.cornerStyle==='round';
+  const noExtend = (g.cornerStyle==='round'||g.cornerStyle==='cut'||g.cornerStyle==='squarecut');
   const dualTL=g.lips.top&&g.lips.left, dualTR=g.lips.top&&g.lips.right;
   const dualBR=g.lips.bottom&&g.lips.right, dualBL=g.lips.bottom&&g.lips.left;
   const topX0=(dualTL&&!noExtend)?g.x0:0, topX1=(dualTR&&!noExtend)?g.x1:g.L;
