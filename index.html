@@ -359,7 +359,13 @@ function cornerPts(px,py,sx,sy,c,style,firstAxis){
   const IC=[px+sx*c, py+sy*c];
   const tangentH=[px+sx*2*c, py], tangentV=[px, py+sy*2*c];
   if(style==='cut') return firstAxis==='v' ? [tangentV,tangentH] : [tangentH,tangentV];
-  if(style==='squarecut') return firstAxis==='v' ? [tangentV,IC,tangentH] : [tangentH,IC,tangentV];
+  if(style==='squarecut'){
+    // QUAN TRỌNG: bậc vuông phải dùng V/H lệch ĐÚNG 1×c (không phải 2×c như tangentV/tangentH
+    // của Cắt chéo/Bo tròn) — nếu dùng 2×c thì V-IC-H thẳng hàng (cùng 1 đường chéo), MẤT góc
+    // vuông 90° ở giữa, nhìn giống hệt Cắt chéo (lỗi đã gặp 2026-07-27). Với offset đúng 1×c,
+    // V-IC là đoạn NGANG, IC-H là đoạn DỌC — 2 đoạn vuông góc, gấp khúc ĐÚNG tại góc lòng trong.
+    return firstAxis==='v' ? [V,IC,H] : [H,IC,V];
+  }
   if(style==='round'){
     // Bo tròn TỪNG TAI RIÊNG (không bo chung 1 cung cho cả 2 tai như trước). Mỗi tai có
     // cung riêng, bán kính = độ sâu tai — điểm nối giữa 2 cung CHÍNH LÀ góc lòng trong, đúng
